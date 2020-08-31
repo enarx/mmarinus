@@ -5,7 +5,6 @@
 //! For example:
 //!
 //! ```rust
-//! use std::num::NonZeroUsize;
 //! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
@@ -22,7 +21,6 @@
 //! You can also remap an existing mapping:
 //!
 //! ```rust
-//! use std::num::NonZeroUsize;
 //! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
@@ -50,7 +48,6 @@
 //! Alternatively, you can just change the permissions:
 //!
 //! ```rust
-//! use std::num::NonZeroUsize;
 //! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
@@ -75,7 +72,6 @@
 //! Mapping a whole file into memory is easy:
 //!
 //! ```rust
-//! use std::num::NonZeroUsize;
 //! use mmarinus::{Kind, Builder, perms};
 //!
 //! let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
