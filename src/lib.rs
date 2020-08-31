@@ -10,13 +10,13 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let map = Builder::map(4096)
+//! let map = Builder::map(32)
 //!     .near(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 4096]);
+//! assert_eq!(&*map, &[0; 32]);
 //! ```
 //!
 //! You can also remap an existing mapping:
@@ -27,24 +27,24 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Builder::map(4096)
+//! let mut map = Builder::map(32)
 //!     .anywhere()
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 4096]);
+//! assert_eq!(&*map, &[0; 32]);
 //!
 //! let mut map = map.remap()
 //!     .from(&mut zero, 0)
 //!     .known::<perms::ReadWrite>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 4096]);
+//! assert_eq!(&*map, &[0; 32]);
 //! for i in map.iter_mut() {
 //!     *i = 255;
 //! }
-//! assert_eq!(&*map, &[255; 4096]);
+//! assert_eq!(&*map, &[255; 32]);
 //! ```
 //!
 //! Alternatively, you can just change the permissions:
@@ -55,21 +55,21 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Builder::map(4096)
+//! let mut map = Builder::map(32)
 //!     .at(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 4096]);
+//! assert_eq!(&*map, &[0; 32]);
 //!
 //! let mut map = map.reprotect::<perms::ReadWrite>().unwrap();
 //!
-//! assert_eq!(&*map, &[0; 4096]);
+//! assert_eq!(&*map, &[0; 32]);
 //! for i in map.iter_mut() {
 //!     *i = 255;
 //! }
-//! assert_eq!(&*map, &[255; 4096]);
+//! assert_eq!(&*map, &[255; 32]);
 //! ```
 //!
 //! Mapping a whole file into memory is easy:
