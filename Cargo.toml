@@ -4,8 +4,21 @@ version = "0.1.0"
 authors = ["Nathaniel McCallum <npmccallum@redhat.com>"]
 edition = "2018"
 license = "Apache-2.0"
+homepage = "https://github.com/enarx/mmarinus"
+repository = "https://github.com/enarx/mmarinus"
+description = "A safe mmap implementation"
+readme = "README.md"
+keywords = ["mmap"]
+categories = ["os", "os::linux-apis"]
+exclude = [ ".gitignore", ".github/*" ]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[badges]
+# See https://doc.rust-lang.org/cargo/reference/manifest.html#the-badges-section
+github = { repository = "enarx/mmarinus", workflow = "test" }
+#github = { repository = "enarx/mmarinus", workflow = "lint" }
+maintenance = { status = "actively-developed" }
+is-it-maintained-issue-resolution = { repository = "enarx/mmarinus" }
+is-it-maintained-open-issues = { repository = "enarx/mmarinus" }
 
 [dependencies]
 libc = "0.2"
