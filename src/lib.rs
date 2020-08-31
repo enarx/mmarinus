@@ -5,11 +5,11 @@
 //! For example:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let map = Builder::map(32)
+//! let map = Map::map(32)
 //!     .near(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
@@ -21,11 +21,11 @@
 //! You can also remap an existing mapping:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Builder::map(32)
+//! let mut map = Map::map(32)
 //!     .anywhere()
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
@@ -48,11 +48,11 @@
 //! Alternatively, you can just change the permissions:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Builder::map(32)
+//! let mut map = Map::map(32)
 //!     .at(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .known::<perms::Read>(Kind::Private)
@@ -72,7 +72,7 @@
 //! Mapping a whole file into memory is easy:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Builder, perms};
+//! use mmarinus::{Kind, perms};
 //!
 //! let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
 //! ```
@@ -226,7 +226,7 @@ impl Kind {
         let err = Err(ErrorKind::InvalidData);
         let mut file = std::fs::File::open(path)?;
         let size = file.metadata()?.len().try_into().or(err)?;
-        Builder::map(size).anywhere().from(&mut file, 0).known(self)
+        Map::map(size).anywhere().from(&mut file, 0).known(self)
     }
 }
 
@@ -257,14 +257,6 @@ impl<'a, T> Stage for Source<'a, T> {}
 
 /// A builder used to construct a new memory mapping
 pub struct Builder<T: Stage>(T);
-
-impl Builder<Size<()>> {
-    /// Begin creating a mapping of the specified size
-    #[inline]
-    pub fn map(size: usize) -> Self {
-        Self(Size { prev: (), size })
-    }
-}
 
 impl<T> Builder<Size<T>> {
     /// Creates the mapping anywhere in valid memory
@@ -556,5 +548,13 @@ impl<T: Type> Map<T> {
 
         forget(self);
         Ok(map)
+    }
+}
+
+impl Map<perms::Unknown> {
+    /// Begin creating a mapping of the specified size
+    #[inline]
+    pub fn map(size: usize) -> Builder<Size<()>> {
+        Builder(Size { prev: (), size })
     }
 }
