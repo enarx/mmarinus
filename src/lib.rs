@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! The `mmap` crate wraps the underlying system `mmap()` call in safe semantics.
+//! The `mmarinus` crate wraps the underlying system `mmap()` call in safe semantics.
 //!
 //! For example:
 //!
 //! ```rust
 //! use std::num::NonZeroUsize;
-//! use mmap::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
@@ -23,7 +23,7 @@
 //!
 //! ```rust
 //! use std::num::NonZeroUsize;
-//! use mmap::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
@@ -51,7 +51,7 @@
 //!
 //! ```rust
 //! use std::num::NonZeroUsize;
-//! use mmap::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Builder, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
@@ -76,7 +76,7 @@
 //!
 //! ```rust
 //! use std::num::NonZeroUsize;
-//! use mmap::{Kind, Builder, perms};
+//! use mmarinus::{Kind, Builder, perms};
 //!
 //! let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
 //! ```
