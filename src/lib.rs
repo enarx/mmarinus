@@ -329,7 +329,7 @@ impl<T> Builder<Destination<T>> {
     ///
     /// This is equivalent to specifying a valid file descriptor and an offset.
     #[inline]
-    pub fn from<'a, U: AsRawFd>(self, file: &'a mut U, offset: i64) -> Builder<Source<'a, T>> {
+    pub fn from<U: AsRawFd>(self, file: &mut U, offset: i64) -> Builder<Source<T>> {
         Builder(Source {
             fd: file.as_raw_fd(),
             data: PhantomData,
