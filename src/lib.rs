@@ -80,7 +80,7 @@
 #![deny(clippy::all)]
 #![deny(missing_docs)]
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::io::ErrorKind;
 use std::marker::PhantomData;
 use std::mem::forget;
@@ -532,7 +532,7 @@ impl<T: Type> Map<T> {
     /// Upon success, the new mapping "steals" the mapping from the old `Map`
     /// instance. Using the old instance is a logic error, but is safe.
     #[inline]
-    pub fn reprotect<U: Known>(self) -> Result<Map<U>, Error<Map<T>>> {
+    pub fn reprotect<U: Known>(self) -> Result<Map<U>, Error<Self>> {
         if unsafe { libc::mprotect(self.addr as _, self.size, U::VALUE) } != 0 {
             return Err(Error {
                 map: self,
@@ -548,6 +548,84 @@ impl<T: Type> Map<T> {
 
         forget(self);
         Ok(map)
+    }
+
+    /// Split a mapping at the specified offset.
+    ///
+    /// The split address MUST be page-aligned or this call will fail.
+    ///
+    /// # Example
+    /// ```
+    /// use mmarinus::{Kind, Map, perms};
+    ///
+    /// const SIZE: usize = 4 * 1024 * 1024;
+    ///
+    /// let map = Map::map(SIZE * 2)
+    ///     .anywhere()
+    ///     .anonymously()
+    ///     .known::<perms::Read>(Kind::Private)
+    ///     .unwrap();
+    ///
+    /// let (l, r) = map.split(SIZE).unwrap();
+    /// assert_eq!(l.size(), SIZE);
+    /// assert_eq!(r.size(), SIZE);
+    /// ```
+    pub fn split(self, offset: usize) -> Result<(Self, Self), Error<Self>> {
+        if let Ok(psize) = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
+            let addr = self.addr + offset;
+            if offset < self.size && addr % psize == 0 {
+                let l = Self {
+                    addr: self.addr,
+                    size: offset,
+                    data: PhantomData,
+                };
+
+                let r = Self {
+                    addr,
+                    size: self.size - offset,
+                    data: PhantomData,
+                };
+
+                forget(self);
+                return Ok((l, r));
+            }
+        }
+
+        Err(Error {
+            map: self,
+            err: std::io::Error::from_raw_os_error(libc::EINVAL),
+        })
+    }
+
+    /// Split a mapping at the specified address.
+    ///
+    /// The address (`at`) MUST be page-aligned or this call will fail.
+    ///
+    /// # Example
+    /// ```
+    /// use mmarinus::{Kind, Map, perms};
+    ///
+    /// const SIZE: usize = 4 * 1024 * 1024;
+    ///
+    /// let map = Map::map(SIZE * 2)
+    ///     .anywhere()
+    ///     .anonymously()
+    ///     .known::<perms::Read>(Kind::Private)
+    ///     .unwrap();
+    ///
+    /// let at = map.addr() + SIZE;
+    /// let (l, r) = map.split_at(at).unwrap();
+    /// assert_eq!(l.size(), SIZE);
+    /// assert_eq!(r.size(), SIZE);
+    /// ```
+    #[inline]
+    pub fn split_at(self, addr: usize) -> Result<(Self, Self), Error<Self>> {
+        let offset = match addr > self.addr {
+            false => self.size,
+            true => addr - self.addr,
+        };
+
+        self.split(offset)
     }
 }
 
