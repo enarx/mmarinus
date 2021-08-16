@@ -573,7 +573,7 @@ impl<T: Type> Map<T> {
     pub fn split(self, offset: usize) -> Result<(Self, Self), Error<Self>> {
         if let Ok(psize) = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
             let addr = self.addr + offset;
-            if offset < self.size && addr % psize == 0 {
+            if offset <= self.size && addr % psize == 0 {
                 let l = Self {
                     addr: self.addr,
                     size: offset,
@@ -620,7 +620,7 @@ impl<T: Type> Map<T> {
     /// ```
     #[inline]
     pub fn split_at(self, addr: usize) -> Result<(Self, Self), Error<Self>> {
-        let offset = match addr > self.addr {
+        let offset = match addr >= self.addr {
             false => self.size,
             true => addr - self.addr,
         };
@@ -634,5 +634,42 @@ impl Map<perms::Unknown> {
     #[inline]
     pub fn map(size: usize) -> Builder<Size<()>> {
         Builder(Size { prev: (), size })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{perms, Kind, Map};
+
+    #[test]
+    fn zero_split() {
+        const SIZE: usize = 4 * 1024 * 1024;
+
+        let map = Map::map(SIZE)
+            .anywhere()
+            .anonymously()
+            .known::<perms::Read>(Kind::Private)
+            .unwrap();
+
+        let at = map.addr();
+        let (l, r) = map.split_at(at).unwrap();
+        assert_eq!(l.size(), 0);
+        assert_eq!(r.size(), SIZE);
+    }
+
+    #[test]
+    fn full_size_split() {
+        const SIZE: usize = 4 * 1024 * 1024;
+
+        let map = Map::map(SIZE)
+            .anywhere()
+            .anonymously()
+            .known::<perms::Read>(Kind::Private)
+            .unwrap();
+
+        let at = map.addr() + SIZE;
+        let (l, r) = map.split_at(at).unwrap();
+        assert_eq!(l.size(), SIZE);
+        assert_eq!(r.size(), 0);
     }
 }
