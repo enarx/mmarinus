@@ -6,39 +6,47 @@
 //!
 //! ```rust
 //! use mmarinus::{Kind, Map, perms};
+//! use std::io::Read;
 //!
-//! let mut zero = std::fs::File::open("/dev/zero").unwrap();
+//! let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
+//!
+//! let mut chunk = [0u8; 32];
+//! hosts.read_exact(&mut chunk).unwrap();
 //!
 //! let map = Map::map(32)
 //!     .near(128 * 1024 * 1024)
-//!     .from(&mut zero, 0)
+//!     .from(&mut hosts, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 32]);
+//! assert_eq!(&*map, &chunk);
 //! ```
 //!
 //! You can also remap an existing mapping:
 //!
 //! ```rust
 //! use mmarinus::{Kind, Map, perms};
+//! use std::io::Read;
 //!
-//! let mut zero = std::fs::File::open("/dev/zero").unwrap();
+//! let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
+//!
+//! let mut chunk = [0u8; 32];
+//! hosts.read_exact(&mut chunk).unwrap();
 //!
 //! let mut map = Map::map(32)
 //!     .anywhere()
-//!     .from(&mut zero, 0)
+//!     .from(&mut hosts, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 32]);
+//! assert_eq!(&*map, &chunk);
 //!
 //! let mut map = map.remap()
-//!     .from(&mut zero, 0)
+//!     .from(&mut hosts, 0)
 //!     .known::<perms::ReadWrite>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 32]);
+//! assert_eq!(&*map, &chunk);
 //! for i in map.iter_mut() {
 //!     *i = 255;
 //! }
@@ -49,20 +57,24 @@
 //!
 //! ```rust
 //! use mmarinus::{Kind, Map, perms};
+//! use std::io::Read;
 //!
-//! let mut zero = std::fs::File::open("/dev/zero").unwrap();
+//! let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
+//!
+//! let mut chunk = [0u8; 32];
+//! hosts.read_exact(&mut chunk).unwrap();
 //!
 //! let mut map = Map::map(32)
-//!     .at(128 * 1024 * 1024)
-//!     .from(&mut zero, 0)
+//!     .anywhere()
+//!     .from(&mut hosts, 0)
 //!     .known::<perms::Read>(Kind::Private)
 //!     .unwrap();
 //!
-//! assert_eq!(&*map, &[0; 32]);
+//! assert_eq!(&*map, &chunk);
 //!
 //! let mut map = map.reprotect::<perms::ReadWrite>().unwrap();
 //!
-//! assert_eq!(&*map, &[0; 32]);
+//! assert_eq!(&*map, &chunk);
 //! for i in map.iter_mut() {
 //!     *i = 255;
 //! }
@@ -74,7 +86,7 @@
 //! ```rust
 //! use mmarinus::{Kind, perms};
 //!
-//! let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
+//! let map = Kind::Private.load::<perms::Read, _>("/etc/hosts").unwrap();
 //! ```
 
 #![deny(clippy::all)]
@@ -346,6 +358,10 @@ impl<'a, T> Builder<Source<'a, T>> {
     /// If `pow = 0`, the kernel will pick the huge page size. Otherwise, if
     /// you wish to specify the huge page size, you should give the power
     /// of two which indicates the page size you want.
+    ///
+    /// MacOS (10.7 up through the present 15.0) supports "superpages", but
+    /// only in one size: 2MB. So the kernel will pick the huge page size for
+    /// all values of `pow`, and it always chooses 2MB.
     #[inline]
     pub fn with_huge_pages(mut self, pow: u8) -> Self {
         self.0.huge = Some(pow.into());
@@ -369,6 +385,7 @@ impl<'a, T> Builder<Source<'a, T>> {
             Kind::Shared => libc::MAP_SHARED,
         };
 
+        #[cfg(target_os = "linux")]
         let huge = match self.0.huge {
             Some(x) if x & !libc::MAP_HUGE_MASK != 0 => {
                 return Err(Error {
@@ -381,8 +398,19 @@ impl<'a, T> Builder<Source<'a, T>> {
             None => 0,
         };
 
+        #[cfg(target_os = "macos")]
+        let huge = match self.0.huge {
+            #[allow(deprecated)]
+            // The value is correct, but libc says "use the mach crate instead".
+            // VM_FLAGS_SUPERPAGE_SIZE_2MB is in include/mach/vm_statistics.h
+            // but mach::vm_statistics doesn't have it. So.. just use libc.
+            Some(_) => libc::VM_FLAGS_SUPERPAGE_SIZE_2MB,
+            None => 0,
+        };
+
         let (addr, fixed) = match self.0.prev.addr {
             Address::None => (0, 0),
+            #[cfg(target_os = "linux")]
             Address::At(a) if a != 0 => (a, libc::MAP_FIXED_NOREPLACE),
             Address::Near(a) if a != 0 => (a, 0),
             Address::Onto(a) if a != 0 => (a, libc::MAP_FIXED),
@@ -400,9 +428,31 @@ impl<'a, T> Builder<Source<'a, T>> {
         };
 
         let size = self.0.prev.prev.size;
-        let flags = kind | fixed | anon | huge;
+        let flags = kind | fixed | anon;
 
-        let ret = unsafe { libc::mmap(addr as _, size, perms, flags, self.0.fd, self.0.offset) };
+        #[cfg(target_os = "linux")]
+        let ret = unsafe {
+            libc::mmap(
+                addr as _,
+                size,
+                perms,
+                flags | huge,
+                self.0.fd,
+                self.0.offset,
+            )
+        };
+        #[cfg(target_os = "macos")]
+        let ret = unsafe {
+            libc::mmap(
+                addr as _,
+                size,
+                perms,
+                flags,
+                self.0.fd | huge,
+                self.0.offset,
+            )
+        };
+
         if ret == libc::MAP_FAILED {
             return Err(Error {
                 map: self.0.prev.prev.prev,
@@ -639,7 +689,7 @@ impl Map<perms::Unknown> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{perms, Kind, Map};
+    use crate::{perms, sealed::Known, Kind, Map};
 
     #[test]
     fn zero_split() {
@@ -671,5 +721,18 @@ mod tests {
         let (l, r) = map.split_at(at).unwrap();
         assert_eq!(l.size(), SIZE);
         assert_eq!(r.size(), 0);
+    }
+
+    #[test]
+    fn huge() {
+        const SIZE: usize = 4 * 1024 * 1024;
+
+        let map = Map::map(SIZE)
+            .anywhere()
+            .anonymously()
+            .with_huge_pages(0)
+            .unknown(Kind::Private, perms::ReadWrite::VALUE)
+            .unwrap();
+        assert_eq!(map.size(), SIZE);
     }
 }
