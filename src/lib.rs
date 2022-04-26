@@ -72,9 +72,9 @@
 //! Mapping a whole file into memory is easy:
 //!
 //! ```rust
-//! use mmarinus::{Map, perms};
+//! use mmarinus::{Map, Private, perms};
 //!
-//! let map = Map::load("/etc/os-release", perms::Read).unwrap();
+//! let map = Map::load("/etc/os-release", Private, perms::Read).unwrap();
 //! ```
 
 #![forbid(clippy::expect_used, clippy::panic)]
@@ -91,5 +91,5 @@ mod error;
 mod map;
 
 pub use error::Error;
-pub use map::Map;
+pub use map::{Map, Private, Shared};
 pub mod perms;
