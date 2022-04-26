@@ -5,14 +5,14 @@
 //! For example:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Map, perms};
+//! use mmarinus::{Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
 //! let map = Map::map(32)
 //!     .near(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>(Kind::Private)
+//!     .known::<perms::Read>()
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
@@ -21,21 +21,21 @@
 //! You can also remap an existing mapping:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Map, perms};
+//! use mmarinus::{Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
 //! let mut map = Map::map(32)
 //!     .anywhere()
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>(Kind::Private)
+//!     .known::<perms::Read>()
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
 //!
 //! let mut map = map.remap()
 //!     .from(&mut zero, 0)
-//!     .known::<perms::ReadWrite>(Kind::Private)
+//!     .known::<perms::ReadWrite>()
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
@@ -48,14 +48,14 @@
 //! Alternatively, you can just change the permissions:
 //!
 //! ```rust
-//! use mmarinus::{Kind, Map, perms};
+//! use mmarinus::{Map, perms};
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
 //! let mut map = Map::map(32)
 //!     .at(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>(Kind::Private)
+//!     .known::<perms::Read>()
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
@@ -72,9 +72,9 @@
 //! Mapping a whole file into memory is easy:
 //!
 //! ```rust
-//! use mmarinus::{Kind, perms};
+//! use mmarinus::{Map, perms};
 //!
-//! let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
+//! let map: Map<perms::Read> = Map::load("/etc/os-release").unwrap();
 //! ```
 
 #![deny(clippy::all)]
@@ -200,33 +200,6 @@ impl From<ErrorKind> for Error<()> {
             map: (),
             err: value.into(),
         }
-    }
-}
-
-/// The type of mapping to create
-#[derive(Copy, Clone, Debug)]
-pub enum Kind {
-    /// A private mapping
-    ///
-    /// See `MAP_PRIVATE` in `man mmap` for more details.
-    Private,
-
-    /// A shared mapping
-    ///
-    /// See `MAP_SHARED` in `man mmap` for more details.
-    Shared,
-}
-
-impl Kind {
-    /// Maps a whole file into memory
-    ///
-    /// This is simply a convenience function.
-    #[inline]
-    pub fn load<T: Known, U: AsRef<Path>>(self, path: U) -> Result<Map<T>, Error<()>> {
-        let err = Err(ErrorKind::InvalidData);
-        let mut file = std::fs::File::open(path)?;
-        let size = file.metadata()?.len().try_into().or(err)?;
-        Map::map(size).anywhere().from(&mut file, 0).known(self)
     }
 }
 
@@ -361,13 +334,8 @@ impl<'a, T> Builder<Source<'a, T>> {
     /// The resulting `Map` object will be missing a lot of useful APIs.
     /// However, it will still manage the map lifecycle.
     #[inline]
-    pub fn unknown(self, kind: Kind, perms: i32) -> Result<Map<perms::Unknown>, Error<T>> {
+    pub fn unknown(self, perms: i32) -> Result<Map<perms::Unknown>, Error<T>> {
         let einval = ErrorKind::InvalidInput.into();
-
-        let kind = match kind {
-            Kind::Private => libc::MAP_PRIVATE,
-            Kind::Shared => libc::MAP_SHARED,
-        };
 
         let huge = match self.0.huge {
             Some(x) if x & !libc::MAP_HUGE_MASK != 0 => {
@@ -400,7 +368,7 @@ impl<'a, T> Builder<Source<'a, T>> {
         };
 
         let size = self.0.prev.prev.size;
-        let flags = kind | fixed | anon | huge;
+        let flags = libc::MAP_PRIVATE | fixed | anon | huge;
 
         let ret = unsafe { libc::mmap(addr as _, size, perms, flags, self.0.fd, self.0.offset) };
         if ret == libc::MAP_FAILED {
@@ -424,8 +392,8 @@ impl<'a, T> Builder<Source<'a, T>> {
     /// The use of this method should be preferred to `Self::unknown()` since
     /// this permits for compile-time permission validation.
     #[inline]
-    pub fn known<U: Known>(self, kind: Kind) -> Result<Map<U>, Error<T>> {
-        let unknown = self.unknown(kind, U::VALUE)?;
+    pub fn known<U: Known>(self) -> Result<Map<U>, Error<T>> {
+        let unknown = self.unknown(U::VALUE)?;
         let known = Map {
             addr: unknown.addr,
             size: unknown.size,
@@ -499,6 +467,19 @@ impl<T: Known> From<Map<T>> for Map<perms::Unknown> {
     }
 }
 
+impl<T: Known> Map<T> {
+    /// Maps a whole file into memory
+    ///
+    /// This is simply a convenience function.
+    #[inline]
+    pub fn load<U: AsRef<Path>>(path: U) -> Result<Map<T>, Error<()>> {
+        let err = Err(ErrorKind::InvalidData);
+        let mut file = std::fs::File::open(path)?;
+        let size = file.metadata()?.len().try_into().or(err)?;
+        Map::map(size).anywhere().from(&mut file, 0).known()
+    }
+}
+
 impl<T: Type> Map<T> {
     /// Gets the address of the mapping
     #[inline]
@@ -556,14 +537,14 @@ impl<T: Type> Map<T> {
     ///
     /// # Example
     /// ```
-    /// use mmarinus::{Kind, Map, perms};
+    /// use mmarinus::{Map, perms};
     ///
     /// const SIZE: usize = 4 * 1024 * 1024;
     ///
     /// let map = Map::map(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .known::<perms::Read>(Kind::Private)
+    ///     .known::<perms::Read>()
     ///     .unwrap();
     ///
     /// let (l, r) = map.split(SIZE).unwrap();
@@ -603,14 +584,14 @@ impl<T: Type> Map<T> {
     ///
     /// # Example
     /// ```
-    /// use mmarinus::{Kind, Map, perms};
+    /// use mmarinus::{Map, perms};
     ///
     /// const SIZE: usize = 4 * 1024 * 1024;
     ///
     /// let map = Map::map(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .known::<perms::Read>(Kind::Private)
+    ///     .known::<perms::Read>()
     ///     .unwrap();
     ///
     /// let at = map.addr() + SIZE;
@@ -639,7 +620,7 @@ impl Map<perms::Unknown> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{perms, Kind, Map};
+    use crate::{perms, Map};
 
     #[test]
     fn zero_split() {
@@ -648,7 +629,7 @@ mod tests {
         let map = Map::map(SIZE)
             .anywhere()
             .anonymously()
-            .known::<perms::Read>(Kind::Private)
+            .known::<perms::Read>()
             .unwrap();
 
         let at = map.addr();
@@ -664,7 +645,7 @@ mod tests {
         let map = Map::map(SIZE)
             .anywhere()
             .anonymously()
-            .known::<perms::Read>(Kind::Private)
+            .known::<perms::Read>()
             .unwrap();
 
         let at = map.addr() + SIZE;

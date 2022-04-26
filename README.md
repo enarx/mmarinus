@@ -10,14 +10,14 @@ The `mmarinus` crate wraps the underlying system `mmap()` call in safe semantics
 For example:
 
 ```rust
-use mmarinus::{Kind, Map, perms};
+use mmarinus::{Map, perms};
 
 let mut zero = std::fs::File::open("/dev/zero").unwrap();
 
 let map = Map::map(32)
     .near(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .known::<perms::Read>(Kind::Private)
+    .known::<perms::Read>()
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -26,21 +26,21 @@ assert_eq!(&*map, &[0; 32]);
 You can also remap an existing mapping:
 
 ```rust
-use mmarinus::{Kind, Map, perms};
+use mmarinus::{Map, perms};
 
 let mut zero = std::fs::File::open("/dev/zero").unwrap();
 
 let mut map = Map::map(32)
     .anywhere()
     .from(&mut zero, 0)
-    .known::<perms::Read>(Kind::Private)
+    .known::<perms::Read>()
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
 
 let mut map = map.remap()
     .from(&mut zero, 0)
-    .known::<perms::ReadWrite>(Kind::Private)
+    .known::<perms::ReadWrite>()
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -53,14 +53,14 @@ assert_eq!(&*map, &[255; 32]);
 Alternatively, you can just change the permissions:
 
 ```rust
-use mmarinus::{Kind, Map, perms};
+use mmarinus::{Map, perms};
 
 let mut zero = std::fs::File::open("/dev/zero").unwrap();
 
 let mut map = Map::map(32)
     .at(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .known::<perms::Read>(Kind::Private)
+    .known::<perms::Read>()
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -77,9 +77,9 @@ assert_eq!(&*map, &[255; 32]);
 Mapping a whole file into memory is easy:
 
 ```rust
-use mmarinus::{Kind, perms};
+use mmarinus::{Map, perms};
 
-let map = Kind::Private.load::<perms::Read, _>("/etc/os-release").unwrap();
+let map: Map<perms::Read> = Map::load("/etc/os-release").unwrap();
 ```
 
 License: Apache-2.0
