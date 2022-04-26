@@ -12,7 +12,7 @@
 //! let map = Map::map(32)
 //!     .near(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>()
+//!     .map(perms::Read)
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
@@ -28,14 +28,14 @@
 //! let mut map = Map::map(32)
 //!     .anywhere()
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>()
+//!     .map(perms::Read)
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
 //!
 //! let mut map = map.remap()
 //!     .from(&mut zero, 0)
-//!     .known::<perms::ReadWrite>()
+//!     .map(perms::ReadWrite)
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
@@ -55,12 +55,12 @@
 //! let mut map = Map::map(32)
 //!     .at(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
-//!     .known::<perms::Read>()
+//!     .map(perms::Read)
 //!     .unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
 //!
-//! let mut map = map.reprotect::<perms::ReadWrite>().unwrap();
+//! let mut map = map.reprotect(perms::ReadWrite).unwrap();
 //!
 //! assert_eq!(&*map, &[0; 32]);
 //! for i in map.iter_mut() {
@@ -74,7 +74,7 @@
 //! ```rust
 //! use mmarinus::{Map, perms};
 //!
-//! let map: Map<perms::Read> = Map::load("/etc/os-release").unwrap();
+//! let map = Map::load("/etc/os-release", perms::Read).unwrap();
 //! ```
 
 #![deny(clippy::all)]
@@ -91,10 +91,18 @@ use std::slice::{from_raw_parts, from_raw_parts_mut};
 mod sealed {
     pub trait Stage {}
 
-    pub trait Type {}
+    pub trait Type {
+        fn perms(self) -> libc::c_int;
+    }
 
     pub trait Known: Type {
         const VALUE: libc::c_int;
+    }
+
+    impl<T: Known> Type for T {
+        fn perms(self) -> libc::c_int {
+            Self::VALUE
+        }
     }
 
     pub trait Readable: Known {}
@@ -114,9 +122,7 @@ pub mod perms {
         ($($name:ident[$($trait:ident),* $(,)?] => $value:expr),+ $(,)?) => {
             $(
                 #[derive(Debug)]
-                pub struct $name(());
-
-                impl super::Type for $name {}
+                pub struct $name;
 
                 impl super::Known for $name {
                     const VALUE: libc::c_int = $value;
@@ -140,8 +146,14 @@ pub mod perms {
         ReadWriteExecute[Readable, Writeable, Executable] => libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
     }
 
-    pub struct Unknown(());
-    impl super::Type for Unknown {}
+    pub struct Unknown(pub libc::c_int);
+
+    impl super::Type for Unknown {
+        #[inline]
+        fn perms(self) -> libc::c_int {
+            self.0
+        }
+    }
 }
 
 enum Address {
@@ -325,17 +337,15 @@ impl<'a, T> Builder<Source<'a, T>> {
         self
     }
 
-    /// Creates a mapping with unknown (i.e. run-time) permissions
+    /// Creates a mapping with the specified permissions
     ///
-    /// You should use a moderate amount of effort to avoid using this method.
-    /// Its purpose is to allow dynamically setting the map permissions at run
-    /// time. This implies that we cannot do compile-time checking.
-    ///
-    /// The resulting `Map` object will be missing a lot of useful APIs.
-    /// However, it will still manage the map lifecycle.
+    /// The use of `Known` permissions should be preferred to the use of
+    /// `Unknown` (i.e. runtime) permissions as this will supply a variety of
+    /// useful APIs.
     #[inline]
-    pub fn unknown(self, perms: i32) -> Result<Map<perms::Unknown>, Error<T>> {
+    pub fn map<U: Type>(self, perms: U) -> Result<Map<U>, Error<T>> {
         let einval = ErrorKind::InvalidInput.into();
+        let perms = perms.perms();
 
         let huge = match self.0.huge {
             Some(x) if x & !libc::MAP_HUGE_MASK != 0 => {
@@ -385,22 +395,6 @@ impl<'a, T> Builder<Source<'a, T>> {
             size: self.0.prev.prev.size,
             data: PhantomData,
         })
-    }
-
-    /// Creates a mapping with known (i.e. compile-time) permissions
-    ///
-    /// The use of this method should be preferred to `Self::unknown()` since
-    /// this permits for compile-time permission validation.
-    #[inline]
-    pub fn known<U: Known>(self) -> Result<Map<U>, Error<T>> {
-        let unknown = self.unknown(U::VALUE)?;
-        let known = Map {
-            addr: unknown.addr,
-            size: unknown.size,
-            data: PhantomData,
-        };
-        forget(unknown);
-        Ok(known)
     }
 }
 
@@ -467,20 +461,18 @@ impl<T: Known> From<Map<T>> for Map<perms::Unknown> {
     }
 }
 
-impl<T: Known> Map<T> {
+impl<T: Type> Map<T> {
     /// Maps a whole file into memory
     ///
     /// This is simply a convenience function.
     #[inline]
-    pub fn load<U: AsRef<Path>>(path: U) -> Result<Map<T>, Error<()>> {
+    pub fn load<U: AsRef<Path>>(path: U, perms: T) -> Result<Map<T>, Error<()>> {
         let err = Err(ErrorKind::InvalidData);
         let mut file = std::fs::File::open(path)?;
         let size = file.metadata()?.len().try_into().or(err)?;
-        Map::map(size).anywhere().from(&mut file, 0).known()
+        Map::map(size).anywhere().from(&mut file, 0).map(perms)
     }
-}
 
-impl<T: Type> Map<T> {
     /// Gets the address of the mapping
     #[inline]
     pub fn addr(&self) -> usize {
@@ -513,8 +505,8 @@ impl<T: Type> Map<T> {
     /// Upon success, the new mapping "steals" the mapping from the old `Map`
     /// instance. Using the old instance is a logic error, but is safe.
     #[inline]
-    pub fn reprotect<U: Known>(self) -> Result<Map<U>, Error<Self>> {
-        if unsafe { libc::mprotect(self.addr as _, self.size, U::VALUE) } != 0 {
+    pub fn reprotect<U: Type>(self, perms: U) -> Result<Map<U>, Error<Self>> {
+        if unsafe { libc::mprotect(self.addr as _, self.size, perms.perms()) } != 0 {
             return Err(Error {
                 map: self,
                 err: std::io::Error::last_os_error(),
@@ -544,7 +536,7 @@ impl<T: Type> Map<T> {
     /// let map = Map::map(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .known::<perms::Read>()
+    ///     .map(perms::Read)
     ///     .unwrap();
     ///
     /// let (l, r) = map.split(SIZE).unwrap();
@@ -591,7 +583,7 @@ impl<T: Type> Map<T> {
     /// let map = Map::map(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .known::<perms::Read>()
+    ///     .map(perms::Read)
     ///     .unwrap();
     ///
     /// let at = map.addr() + SIZE;
@@ -629,7 +621,7 @@ mod tests {
         let map = Map::map(SIZE)
             .anywhere()
             .anonymously()
-            .known::<perms::Read>()
+            .map(perms::Read)
             .unwrap();
 
         let at = map.addr();
@@ -645,7 +637,7 @@ mod tests {
         let map = Map::map(SIZE)
             .anywhere()
             .anonymously()
-            .known::<perms::Read>()
+            .map(perms::Read)
             .unwrap();
 
         let at = map.addr() + SIZE;
