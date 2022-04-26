@@ -228,17 +228,16 @@ pub struct Destination<T> {
 }
 
 #[doc(hidden)]
-pub struct Source<'a, T> {
+pub struct Source<T> {
     prev: Destination<T>,
     fd: RawFd,
     offset: libc::off_t,
     huge: Option<i32>,
-    data: PhantomData<&'a ()>,
 }
 
 impl<T> Stage for Size<T> {}
 impl<T> Stage for Destination<T> {}
-impl<'a, T> Stage for Source<'a, T> {}
+impl<T> Stage for Source<T> {}
 
 /// A builder used to construct a new memory mapping
 pub struct Builder<T: Stage>(T);
@@ -300,9 +299,8 @@ impl<T> Builder<Destination<T>> {
     /// This is equivalent to specifying `-1` as the file descriptor, `0` as
     /// the offset and `MAP_ANONYMOUS` in the flags.
     #[inline]
-    pub fn anonymously<'a>(self) -> Builder<Source<'a, T>> {
+    pub fn anonymously(self) -> Builder<Source<T>> {
         Builder(Source {
-            data: PhantomData,
             prev: self.0,
             huge: None,
             offset: 0,
@@ -317,7 +315,6 @@ impl<T> Builder<Destination<T>> {
     pub fn from<U: AsRawFd>(self, file: &mut U, offset: i64) -> Builder<Source<T>> {
         Builder(Source {
             fd: file.as_raw_fd(),
-            data: PhantomData,
             prev: self.0,
             huge: None,
             offset,
@@ -325,7 +322,7 @@ impl<T> Builder<Destination<T>> {
     }
 }
 
-impl<'a, T> Builder<Source<'a, T>> {
+impl<T> Builder<Source<T>> {
     /// Uses huge pages for the mapping
     ///
     /// If `pow = 0`, the kernel will pick the huge page size. Otherwise, if
