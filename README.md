@@ -17,7 +17,7 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let map = Map::map(32)
     .near(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .known::<perms::Read>()
+    .map(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -33,14 +33,14 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let mut map = Map::map(32)
     .anywhere()
     .from(&mut zero, 0)
-    .known::<perms::Read>()
+    .map(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
 
 let mut map = map.remap()
     .from(&mut zero, 0)
-    .known::<perms::ReadWrite>()
+    .map(perms::ReadWrite)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -60,12 +60,12 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let mut map = Map::map(32)
     .at(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .known::<perms::Read>()
+    .map(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
 
-let mut map = map.reprotect::<perms::ReadWrite>().unwrap();
+let mut map = map.reprotect(perms::ReadWrite).unwrap();
 
 assert_eq!(&*map, &[0; 32]);
 for i in map.iter_mut() {
@@ -79,7 +79,7 @@ Mapping a whole file into memory is easy:
 ```rust
 use mmarinus::{Map, perms};
 
-let map: Map<perms::Read> = Map::load("/etc/os-release").unwrap();
+let map = Map::load("/etc/os-release", perms::Read).unwrap();
 ```
 
 License: Apache-2.0
