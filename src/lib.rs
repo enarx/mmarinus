@@ -9,7 +9,7 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let map = Map::map(32)
+//! let map = Map::bytes(32)
 //!     .near(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .map(perms::Read)
@@ -25,7 +25,7 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Map::map(32)
+//! let mut map = Map::bytes(32)
 //!     .anywhere()
 //!     .from(&mut zero, 0)
 //!     .map(perms::Read)
@@ -52,7 +52,7 @@
 //!
 //! let mut zero = std::fs::File::open("/dev/zero").unwrap();
 //!
-//! let mut map = Map::map(32)
+//! let mut map = Map::bytes(32)
 //!     .at(128 * 1024 * 1024)
 //!     .from(&mut zero, 0)
 //!     .map(perms::Read)

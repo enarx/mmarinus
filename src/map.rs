@@ -130,7 +130,7 @@ impl<T: Type, K: Kind> Map<T, K> {
         let err = Err(ErrorKind::InvalidData);
         let mut file = std::fs::File::open(path)?;
         let size = file.metadata()?.len().try_into().or(err)?;
-        Map::map(size)
+        Map::bytes(size)
             .anywhere()
             .from(&mut file, 0)
             .with_kind(kind)
@@ -197,7 +197,7 @@ impl<T: Type, K: Kind> Map<T, K> {
     ///
     /// const SIZE: usize = 4 * 1024 * 1024;
     ///
-    /// let map = Map::map(SIZE * 2)
+    /// let map = Map::bytes(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
     ///     .map(perms::Read)
@@ -244,7 +244,7 @@ impl<T: Type, K: Kind> Map<T, K> {
     ///
     /// const SIZE: usize = 4 * 1024 * 1024;
     ///
-    /// let map = Map::map(SIZE * 2)
+    /// let map = Map::bytes(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
     ///     .map(perms::Read)
@@ -269,7 +269,7 @@ impl<T: Type, K: Kind> Map<T, K> {
 impl Map<perms::Unknown, Shared> {
     /// Begin creating a mapping of the specified size
     #[inline]
-    pub fn map(size: usize) -> Builder<Size<()>> {
+    pub fn bytes(size: usize) -> Builder<Size<()>> {
         Builder(Size { prev: (), size })
     }
 }
@@ -282,7 +282,7 @@ mod tests {
     fn zero_split() {
         const SIZE: usize = 4 * 1024 * 1024;
 
-        let map = Map::map(SIZE)
+        let map = Map::bytes(SIZE)
             .anywhere()
             .anonymously()
             .map(perms::Read)
@@ -298,7 +298,7 @@ mod tests {
     fn full_size_split() {
         const SIZE: usize = 4 * 1024 * 1024;
 
-        let map = Map::map(SIZE)
+        let map = Map::bytes(SIZE)
             .anywhere()
             .anonymously()
             .map(perms::Read)
