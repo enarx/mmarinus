@@ -17,7 +17,7 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let map = Map::bytes(32)
     .near(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .map(perms::Read)
+    .with(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -33,14 +33,14 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let mut map = Map::bytes(32)
     .anywhere()
     .from(&mut zero, 0)
-    .map(perms::Read)
+    .with(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
 
 let mut map = map.remap()
     .from(&mut zero, 0)
-    .map(perms::ReadWrite)
+    .with(perms::ReadWrite)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
@@ -60,7 +60,7 @@ let mut zero = std::fs::File::open("/dev/zero").unwrap();
 let mut map = Map::bytes(32)
     .at(128 * 1024 * 1024)
     .from(&mut zero, 0)
-    .map(perms::Read)
+    .with(perms::Read)
     .unwrap();
 
 assert_eq!(&*map, &[0; 32]);
