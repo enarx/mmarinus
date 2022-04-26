@@ -171,28 +171,28 @@ enum Address {
 /// If the operation is unsuccessful, the old mapping is returned along with
 /// the error condition.
 #[derive(Debug)]
-pub struct Error<T> {
+pub struct Error<M> {
     /// The previous mapping that could not be modified
-    pub map: T,
+    pub map: M,
 
     /// The underlying error
     pub err: std::io::Error,
 }
 
-impl<T> std::fmt::Display for Error<T> {
+impl<M> std::fmt::Display for Error<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         self.err.fmt(f)
     }
 }
 
-impl<T: std::fmt::Debug> std::error::Error for Error<T> {
+impl<M: std::fmt::Debug> std::error::Error for Error<M> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.err)
     }
 }
 
-impl<T> From<Error<T>> for std::io::Error {
-    fn from(value: Error<T>) -> Self {
+impl<M> From<Error<M>> for std::io::Error {
+    fn from(value: Error<M>) -> Self {
         value.err
     }
 }
@@ -216,38 +216,38 @@ impl From<ErrorKind> for Error<()> {
 }
 
 #[doc(hidden)]
-pub struct Size<T> {
-    prev: T,
+pub struct Size<M> {
+    prev: M,
     size: usize,
 }
 
 #[doc(hidden)]
-pub struct Destination<T> {
-    prev: Size<T>,
+pub struct Destination<M> {
+    prev: Size<M>,
     addr: Address,
 }
 
 #[doc(hidden)]
-pub struct Source<T> {
-    prev: Destination<T>,
+pub struct Source<M> {
+    prev: Destination<M>,
     fd: RawFd,
     offset: libc::off_t,
     huge: Option<i32>,
 }
 
-impl<T> Stage for Size<T> {}
-impl<T> Stage for Destination<T> {}
-impl<T> Stage for Source<T> {}
+impl<M> Stage for Size<M> {}
+impl<M> Stage for Destination<M> {}
+impl<M> Stage for Source<M> {}
 
 /// A builder used to construct a new memory mapping
-pub struct Builder<T: Stage>(T);
+pub struct Builder<S: Stage>(S);
 
-impl<T> Builder<Size<T>> {
+impl<M> Builder<Size<M>> {
     /// Creates the mapping anywhere in valid memory
     ///
     /// This is equivalent to specifying `NULL` as the address to `mmap()`.
     #[inline]
-    pub fn anywhere(self) -> Builder<Destination<T>> {
+    pub fn anywhere(self) -> Builder<Destination<M>> {
         Builder(Destination {
             prev: self.0,
             addr: Address::None,
@@ -258,7 +258,7 @@ impl<T> Builder<Size<T>> {
     ///
     /// This is equivalent to specifying an address with `MAP_FIXED_NOREPLACE` to `mmap()`.
     #[inline]
-    pub fn at(self, addr: usize) -> Builder<Destination<T>> {
+    pub fn at(self, addr: usize) -> Builder<Destination<M>> {
         Builder(Destination {
             prev: self.0,
             addr: Address::At(addr),
@@ -269,7 +269,7 @@ impl<T> Builder<Size<T>> {
     ///
     /// This is equivalent to specifying an address with no additional flags to `mmap()`.
     #[inline]
-    pub fn near(self, addr: usize) -> Builder<Destination<T>> {
+    pub fn near(self, addr: usize) -> Builder<Destination<M>> {
         Builder(Destination {
             prev: self.0,
             addr: Address::Near(addr),
@@ -285,7 +285,7 @@ impl<T> Builder<Size<T>> {
     /// This function is unsafe because it can replace existing mappings,
     /// causing memory corruption.
     #[inline]
-    pub unsafe fn onto(self, addr: usize) -> Builder<Destination<T>> {
+    pub unsafe fn onto(self, addr: usize) -> Builder<Destination<M>> {
         Builder(Destination {
             prev: self.0,
             addr: Address::Onto(addr),
@@ -293,13 +293,13 @@ impl<T> Builder<Size<T>> {
     }
 }
 
-impl<T> Builder<Destination<T>> {
+impl<M> Builder<Destination<M>> {
     /// Creates the mapping without any file backing
     ///
     /// This is equivalent to specifying `-1` as the file descriptor, `0` as
     /// the offset and `MAP_ANONYMOUS` in the flags.
     #[inline]
-    pub fn anonymously(self) -> Builder<Source<T>> {
+    pub fn anonymously(self) -> Builder<Source<M>> {
         Builder(Source {
             prev: self.0,
             huge: None,
@@ -312,7 +312,7 @@ impl<T> Builder<Destination<T>> {
     ///
     /// This is equivalent to specifying a valid file descriptor and an offset.
     #[inline]
-    pub fn from<U: AsRawFd>(self, file: &mut U, offset: i64) -> Builder<Source<T>> {
+    pub fn from<U: AsRawFd>(self, file: &mut U, offset: i64) -> Builder<Source<M>> {
         Builder(Source {
             fd: file.as_raw_fd(),
             prev: self.0,
@@ -322,7 +322,7 @@ impl<T> Builder<Destination<T>> {
     }
 }
 
-impl<T> Builder<Source<T>> {
+impl<M> Builder<Source<M>> {
     /// Uses huge pages for the mapping
     ///
     /// If `pow = 0`, the kernel will pick the huge page size. Otherwise, if
@@ -340,7 +340,7 @@ impl<T> Builder<Source<T>> {
     /// `Unknown` (i.e. runtime) permissions as this will supply a variety of
     /// useful APIs.
     #[inline]
-    pub fn map<U: Type>(self, perms: U) -> Result<Map<U>, Error<T>> {
+    pub fn map<U: Type>(self, perms: U) -> Result<Map<U>, Error<M>> {
         let einval = ErrorKind::InvalidInput.into();
         let perms = perms.perms();
 
