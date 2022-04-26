@@ -8,6 +8,12 @@ use std::mem::forget;
 use std::path::Path;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
+pub trait Kind {
+    fn kind(self) -> libc::c_int;
+}
+
+pub trait Safe: Kind {}
+
 pub trait Type {
     fn perms(self) -> libc::c_int;
 }
@@ -28,17 +34,41 @@ pub trait Writeable: Known {}
 
 pub trait Executable: Known {}
 
+/// Indicates a private mapping
+#[derive(Debug)]
+pub struct Private;
+
+impl Safe for Private {}
+
+impl Kind for Private {
+    #[inline]
+    fn kind(self) -> libc::c_int {
+        libc::MAP_PRIVATE
+    }
+}
+
+/// Indicates a shared mapping
+#[derive(Debug)]
+pub struct Shared;
+
+impl Kind for Shared {
+    #[inline]
+    fn kind(self) -> libc::c_int {
+        libc::MAP_SHARED
+    }
+}
+
 /// A smart pointer to a mapped region of memory
 ///
 /// When this reference is destroyed, `munmap()` will be called on the region.
 #[derive(Debug)]
-pub struct Map<T: Type> {
+pub struct Map<T: Type, K: Kind = Private> {
     pub(crate) addr: usize,
     pub(crate) size: usize,
-    pub(crate) data: PhantomData<T>,
+    pub(crate) data: PhantomData<(T, K)>,
 }
 
-impl<T: Type> Drop for Map<T> {
+impl<T: Type, K: Kind> Drop for Map<T, K> {
     fn drop(&mut self) {
         if self.size > 0 {
             unsafe {
@@ -48,7 +78,7 @@ impl<T: Type> Drop for Map<T> {
     }
 }
 
-impl<T: Readable> std::ops::Deref for Map<T> {
+impl<K: Safe, T: Readable> std::ops::Deref for Map<T, K> {
     type Target = [u8];
 
     #[inline]
@@ -57,30 +87,30 @@ impl<T: Readable> std::ops::Deref for Map<T> {
     }
 }
 
-impl<T: Readable + Writeable> std::ops::DerefMut for Map<T> {
+impl<K: Safe, T: Readable + Writeable> std::ops::DerefMut for Map<T, K> {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe { from_raw_parts_mut(self.addr as *mut u8, self.size) }
     }
 }
 
-impl<T: Readable> AsRef<[u8]> for Map<T> {
+impl<K: Safe, T: Readable> AsRef<[u8]> for Map<T, K> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         &*self
     }
 }
 
-impl<T: Readable + Writeable> AsMut<[u8]> for Map<T> {
+impl<K: Safe, T: Readable + Writeable> AsMut<[u8]> for Map<T, K> {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
         &mut *self
     }
 }
 
-impl<T: Known> From<Map<T>> for Map<perms::Unknown> {
+impl<K: Kind, T: Known> From<Map<T, K>> for Map<perms::Unknown, K> {
     #[inline]
-    fn from(value: Map<T>) -> Map<perms::Unknown> {
+    fn from(value: Map<T, K>) -> Map<perms::Unknown, K> {
         let map = Map {
             addr: value.addr,
             size: value.size,
@@ -91,16 +121,20 @@ impl<T: Known> From<Map<T>> for Map<perms::Unknown> {
     }
 }
 
-impl<T: Type> Map<T> {
+impl<T: Type, K: Kind> Map<T, K> {
     /// Maps a whole file into memory
     ///
     /// This is simply a convenience function.
     #[inline]
-    pub fn load<U: AsRef<Path>>(path: U, perms: T) -> Result<Map<T>, Error<()>> {
+    pub fn load<U: AsRef<Path>>(path: U, kind: K, perms: T) -> Result<Self, Error<()>> {
         let err = Err(ErrorKind::InvalidData);
         let mut file = std::fs::File::open(path)?;
         let size = file.metadata()?.len().try_into().or(err)?;
-        Map::map(size).anywhere().from(&mut file, 0).map(perms)
+        Map::map(size)
+            .anywhere()
+            .from(&mut file, 0)
+            .with_kind(kind)
+            .map(perms)
     }
 
     /// Gets the address of the mapping
@@ -120,7 +154,7 @@ impl<T: Type> Map<T> {
     /// Upon success, the new mapping "steals" the mapping from the old `Map`
     /// instance. Using the old instance is a logic error, but is safe.
     #[inline]
-    pub fn remap(self) -> Builder<Destination<Map<T>>> {
+    pub fn remap(self) -> Builder<Destination<Self>> {
         Builder(Destination {
             addr: Address::Onto(self.addr),
             prev: Size {
@@ -135,7 +169,7 @@ impl<T: Type> Map<T> {
     /// Upon success, the new mapping "steals" the mapping from the old `Map`
     /// instance. Using the old instance is a logic error, but is safe.
     #[inline]
-    pub fn reprotect<U: Type>(self, perms: U) -> Result<Map<U>, Error<Self>> {
+    pub fn reprotect<U: Type>(self, perms: U) -> Result<Map<U, K>, Error<Self>> {
         if unsafe { libc::mprotect(self.addr as _, self.size, perms.perms()) } != 0 {
             return Err(Error {
                 map: self,
@@ -232,7 +266,7 @@ impl<T: Type> Map<T> {
     }
 }
 
-impl Map<perms::Unknown> {
+impl Map<perms::Unknown, Shared> {
     /// Begin creating a mapping of the specified size
     #[inline]
     pub fn map(size: usize) -> Builder<Size<()>> {

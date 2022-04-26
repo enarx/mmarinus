@@ -77,9 +77,9 @@ assert_eq!(&*map, &[255; 32]);
 Mapping a whole file into memory is easy:
 
 ```rust
-use mmarinus::{Map, perms};
+use mmarinus::{Map, Private, perms};
 
-let map = Map::load("/etc/os-release", perms::Read).unwrap();
+let map = Map::load("/etc/os-release", Private, perms::Read).unwrap();
 ```
 
 License: Apache-2.0
