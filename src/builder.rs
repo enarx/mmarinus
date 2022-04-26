@@ -156,7 +156,7 @@ impl<M, K: Kind> Builder<Source<M, K>> {
     /// `Unknown` (i.e. runtime) permissions as this will supply a variety of
     /// useful APIs.
     #[inline]
-    pub fn map<T: Type>(self, perms: T) -> Result<Map<T, K>, Error<M>> {
+    pub fn with<T: Type>(self, perms: T) -> Result<Map<T, K>, Error<M>> {
         let einval = ErrorKind::InvalidInput.into();
         let perms = perms.perms();
         let kind = self.0.kind.kind();

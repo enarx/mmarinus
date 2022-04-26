@@ -134,7 +134,7 @@ impl<T: Type, K: Kind> Map<T, K> {
             .anywhere()
             .from(&mut file, 0)
             .with_kind(kind)
-            .map(perms)
+            .with(perms)
     }
 
     /// Gets the address of the mapping
@@ -200,7 +200,7 @@ impl<T: Type, K: Kind> Map<T, K> {
     /// let map = Map::bytes(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .map(perms::Read)
+    ///     .with(perms::Read)
     ///     .unwrap();
     ///
     /// let (l, r) = map.split(SIZE).unwrap();
@@ -247,7 +247,7 @@ impl<T: Type, K: Kind> Map<T, K> {
     /// let map = Map::bytes(SIZE * 2)
     ///     .anywhere()
     ///     .anonymously()
-    ///     .map(perms::Read)
+    ///     .with(perms::Read)
     ///     .unwrap();
     ///
     /// let at = map.addr() + SIZE;
@@ -285,7 +285,7 @@ mod tests {
         let map = Map::bytes(SIZE)
             .anywhere()
             .anonymously()
-            .map(perms::Read)
+            .with(perms::Read)
             .unwrap();
 
         let at = map.addr();
@@ -301,7 +301,7 @@ mod tests {
         let map = Map::bytes(SIZE)
             .anywhere()
             .anonymously()
-            .map(perms::Read)
+            .with(perms::Read)
             .unwrap();
 
         let at = map.addr() + SIZE;
