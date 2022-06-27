@@ -2,8 +2,8 @@ on: [pull_request]
 name: test
 jobs:
   test:
-    name: ${{ matrix.toolchain }} (${{ matrix.profile.name }})
-    runs-on: ubuntu-latest
+    name: ${{ matrix.platform }} ${{ matrix.toolchain }} (${{ matrix.profile.name }})
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -22,6 +22,9 @@ jobs:
           - beta
           - stable
           - 1.34.0
+        platform:
+          - ubuntu-latest
+          - macos-latest
         profile:
           - name: debug
           - name: release
