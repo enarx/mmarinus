@@ -14,6 +14,7 @@ pub trait Stage {}
 
 pub enum Address {
     None,
+    #[cfg(not(target_os = "macos"))]
     At(usize),
     Near(usize),
     Onto(usize),
@@ -59,6 +60,7 @@ impl<M> Builder<Size<M>> {
     /// Creates the mapping at the specified address
     ///
     /// This is equivalent to specifying an address with `MAP_FIXED_NOREPLACE` to `mmap()`.
+    #[cfg(not(target_os = "macos"))]
     #[inline]
     pub fn at(self, addr: usize) -> Builder<Destination<M>> {
         Builder(Destination {
@@ -191,6 +193,7 @@ impl<M, K: Kind> Builder<Source<M, K>> {
 
         let (addr, fixed) = match self.0.prev.addr {
             Address::None => (0, 0),
+            #[cfg(not(target_os = "macos"))]
             Address::At(a) if a != 0 => (a, libc::MAP_FIXED_NOREPLACE),
             Address::Near(a) if a != 0 => (a, 0),
             Address::Onto(a) if a != 0 => (a, libc::MAP_FIXED),
