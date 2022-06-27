@@ -11,39 +11,48 @@ For example:
 
 ```rust
 use mmarinus::{Map, perms};
+use std::io::Read;
 
-let mut zero = std::fs::File::open("/dev/zero").unwrap();
+let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
+
+let mut chunk = [0u8; 32];
+hosts.read_exact(&mut chunk).unwrap();
 
 let map = Map::bytes(32)
     .near(128 * 1024 * 1024)
-    .from(&mut zero, 0)
+    .from(&mut hosts, 0)
     .with(perms::Read)
     .unwrap();
 
-assert_eq!(&*map, &[0; 32]);
+assert_eq!(&*map, &chunk);
 ```
 
 You can also remap an existing mapping:
 
 ```rust
 use mmarinus::{Map, perms};
+use std::io::Read;
 
-let mut zero = std::fs::File::open("/dev/zero").unwrap();
+let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
+
+let mut chunk = [0u8; 32];
+hosts.read_exact(&mut chunk).unwrap();
 
 let mut map = Map::bytes(32)
     .anywhere()
-    .from(&mut zero, 0)
+    .from(&mut hosts, 0)
     .with(perms::Read)
     .unwrap();
 
-assert_eq!(&*map, &[0; 32]);
+assert_eq!(&*map, &chunk);
 
 let mut map = map.remap()
-    .from(&mut zero, 0)
+    .from(&mut hosts, 0)
     .with(perms::ReadWrite)
     .unwrap();
 
-assert_eq!(&*map, &[0; 32]);
+assert_eq!(&*map, &chunk);
+
 for i in map.iter_mut() {
     *i = 255;
 }
@@ -54,20 +63,24 @@ Alternatively, you can just change the permissions:
 
 ```rust
 use mmarinus::{Map, perms};
+use std::io::Read;
 
-let mut zero = std::fs::File::open("/dev/zero").unwrap();
+let mut hosts = std::fs::File::open("/etc/hosts").unwrap();
 
-let mut map = Map::bytes(32)
-    .at(128 * 1024 * 1024)
-    .from(&mut zero, 0)
+let mut chunk = [0u8; 32];
+hosts.read_exact(&mut chunk).unwrap();
+
+let map = Map::bytes(32)
+    .near(128 * 1024 * 1024)
+    .from(&mut hosts, 0)
     .with(perms::Read)
     .unwrap();
 
-assert_eq!(&*map, &[0; 32]);
+assert_eq!(&*map, &chunk);
 
 let mut map = map.reprotect(perms::ReadWrite).unwrap();
+assert_eq!(&*map, &chunk);
 
-assert_eq!(&*map, &[0; 32]);
 for i in map.iter_mut() {
     *i = 255;
 }
@@ -79,7 +92,7 @@ Mapping a whole file into memory is easy:
 ```rust
 use mmarinus::{Map, Private, perms};
 
-let map = Map::load("/etc/os-release", Private, perms::Read).unwrap();
+let map = Map::load("/etc/hosts", Private, perms::Read).unwrap();
 ```
 
 License: Apache-2.0
