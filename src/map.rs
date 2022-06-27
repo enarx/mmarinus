@@ -309,4 +309,26 @@ mod tests {
         assert_eq!(l.size(), SIZE);
         assert_eq!(r.size(), 0);
     }
+
+    #[test]
+    fn huge() {
+        const SIZE: usize = 4 * 1024 * 1024;
+
+        let ret = Map::bytes(SIZE)
+            .anywhere()
+            .anonymously()
+            .with_huge_pages(0)
+            .with(perms::Read);
+
+        match ret {
+            Err(e) => {
+                // System might not have huge pages reserved by the admin
+                // ErrorKind::OutOfMemory was introduced in 1.54
+                if e.err.raw_os_error() != Some(12) {
+                    panic!("{}", e)
+                }
+            }
+            Ok(map) => assert_eq!(map.size(), SIZE),
+        }
+    }
 }
