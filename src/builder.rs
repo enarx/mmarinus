@@ -132,6 +132,10 @@ impl<M, K: Kind> Builder<Source<M, K>> {
     /// If `pow = 0`, the kernel will pick the huge page size. Otherwise, if
     /// you wish to specify the huge page size, you should give the power
     /// of two which indicates the page size you want.
+    ///
+    /// macOS (10.7 up through the present 15.0) supports "superpages", but
+    /// only in one size: 2MB. So the kernel will pick the huge page size for
+    /// all values of `pow`, and it always chooses 2MB.
     #[inline]
     pub fn with_huge_pages(mut self, pow: u8) -> Self {
         self.0.huge = Some(pow.into());
@@ -161,6 +165,7 @@ impl<M, K: Kind> Builder<Source<M, K>> {
         let perms = perms.perms();
         let kind = self.0.kind.kind();
 
+        #[cfg(target_os = "linux")]
         let huge = match self.0.huge {
             Some(x) if x & !libc::MAP_HUGE_MASK != 0 => {
                 return Err(Error {
@@ -170,6 +175,17 @@ impl<M, K: Kind> Builder<Source<M, K>> {
             }
 
             Some(x) => (x << libc::MAP_HUGE_SHIFT) | libc::MAP_HUGETLB,
+            None => 0,
+        };
+
+        #[cfg(target_os = "macos")]
+        #[allow(deprecated)]
+        let huge = match self.0.huge {
+            // The value is correct, but libc says "use the mach crate instead".
+            // VM_FLAGS_SUPERPAGE_SIZE_2MB is in include/mach/vm_statistics.h
+            // but mach::vm_statistics doesn't have it. So.. just use libc.
+            Some(21) => libc::VM_FLAGS_SUPERPAGE_SIZE_2MB,
+            Some(_) => libc::VM_FLAGS_SUPERPAGE_SIZE_ANY,
             None => 0,
         };
 
@@ -192,9 +208,32 @@ impl<M, K: Kind> Builder<Source<M, K>> {
         };
 
         let size = self.0.prev.prev.size;
-        let flags = kind | fixed | anon | huge;
+        let flags = kind | fixed | anon;
 
-        let ret = unsafe { libc::mmap(addr as _, size, perms, flags, self.0.fd, self.0.offset) };
+        #[cfg(target_os = "linux")]
+        let ret = unsafe {
+            libc::mmap(
+                addr as _,
+                size,
+                perms,
+                flags | huge,
+                self.0.fd,
+                self.0.offset,
+            )
+        };
+
+        #[cfg(target_os = "macos")]
+        let ret = unsafe {
+            libc::mmap(
+                addr as _,
+                size,
+                perms,
+                flags,
+                self.0.fd | huge,
+                self.0.offset,
+            )
+        };
+
         if ret == libc::MAP_FAILED {
             return Err(Error {
                 map: self.0.prev.prev.prev,
