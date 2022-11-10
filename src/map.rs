@@ -97,7 +97,7 @@ impl<K: Safe, T: Readable + Writeable> std::ops::DerefMut for Map<T, K> {
 impl<K: Safe, T: Readable> AsRef<[u8]> for Map<T, K> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self
+        &*self
     }
 }
 
